@@ -1,0 +1,53 @@
+/*
+
+lance@forensickb.com
+May 16, 2008
+
+This EnScript will display all the extensions for all the evidence loaded in EnCase and then the count for the number of files with a given extension. Output is displayed in the CONSOLE tab of EnCase.
+
+The EnScript also creates a local file named "File Count by extension.csv" in the EnCase default export folder that will open by default (based on the .csv extension) by Excel. It can then be sorted how you wish.
+
+*/
+
+
+
+
+
+class MainClass {
+  NameListClass list;
+
+  void Parse(EntryClass entry){
+    forall (EntryClass e in entry){
+      if (e.Extension()){
+        String lowerext = e.Extension();
+        lowerext.ToLower();
+        NameListClass temp = list.Find(lowerext);
+
+        if (temp){
+          new NameListClass (temp, e.Name(),0);
+        }
+
+        else {
+
+         NameListClass temp2 = new NameListClass (list, lowerext,0);
+         new NameListClass (temp2, e.Name(),0);
+
+
+        }
+      }
+    }
+  }
+
+  void Main(CaseClass c) {
+    SystemClass::ClearConsole();
+    list = new NameListClass();
+    LocalFileClass local();
+    local.Open(c.ExportFolder() + "\\" + "File Count by extension.csv", FileClass::WRITE);
+    Parse(c.EntryRoot());
+
+    foreach (NameListClass l in list){
+      Console.WriteLine(l.Name() + "\t" + l.Count());
+      local.WriteLine(l.Name() + "\t" + l.Count());
+    }
+  }
+}

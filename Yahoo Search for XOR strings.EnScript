@@ -1,0 +1,150 @@
+/*
+Search for Yahoo XOR String
+
+This EnScript searches *ONLY* those files which are blue checked.
+This EnScript takes a list of keywords and then performs an XOR with the XOR key and then enters the result as a 
+keyword and searches the blue checked files.
+
+02/17/05 - EnCase v4.20
+
+bruce.pixley@guidancesoftware.com
+lance.mueller@guidancesoftware.com
+
+*/
+
+
+
+class MyDialog: DialogClass {
+   String      Keywords, Key, Path;
+   bool        Check;
+   
+   StringEditClass   _Edit, _Edit1, _Edit2;
+   CheckBoxClass   _Check;
+   StaticTextClass    _Static;
+   
+   MyDialog():
+     DialogClass(null, "Yahoo Chat XOR Keyword Search"),
+     _Check(this, "Append extended header to search term?", 10, 280, 10, 10, 0, Check),
+     _Static(this, " (may increase search time)", 45, 290, 50, 10, 0);
+     _Edit(this, "Bookmark folder name:", 10, 10, 185, DEFAULT, 0, Path, 100, WindowClass::REQUIRED), 
+     _Edit1(this, "Enter the XOR key:", 10, 250, 185, DEFAULT, 0, Key, 20, WindowClass::REQUIRED), 
+     _Edit2(this, "Please enter any keywords you would like\nto search for: (one keyword per line)\n", 10, 40, 185, 180, 0, Keywords, 1000, WindowClass::REQUIRED)        
+
+   {
+    //Constructor
+    Path = "Yahoo XOR Chat keywords";
+   }
+   
+   virtual void CheckControls() { 
+   }
+
+   virtual void ChildEvent(const EventClass &event) {
+   }
+    
+   virtual bool CanClose() {
+     return true;
+   }  
+}
+
+
+class MainClass {
+  SearchClass search;
+  BookmarkFolderClass Folder;
+  MyDialog dialogbox;
+  uint counter;
+  NameListClass list;
+  void Main(CaseClass case) {
+    String keyword;
+    long totalsize, searchedsize;
+    User.ClearConsole();
+    if (dialogbox.Execute() == UserClass::OK) {
+     list.Parse(dialogbox.Keywords, "\n" ,0);
+     for (uint x = 0; x < list.Count(); x++)
+       Console.WriteLine(list.GetChild(x).Name());
+     
+      if (list().Count() > 0){ 
+        forall(EntryClass entry in case){
+          if (entry.IsSelected()){
+            totalsize = entry.LogicalSize();
+          }
+        }
+        User.StatusRange("Searching.......", totalsize);
+        
+        
+        Folder = User.AddBookmarkFolder(dialogbox.Path, "");
+        forall(NameListClass keylist in list){
+         // Console.WriteLine(keylist.Name());
+          Xor(keylist.Name(), dialogbox.Key);
+          keyword = keylist.Name();
+        }
+        forall (EntryClass entry in case){
+          if (entry.IsSelected()){
+          FileClass file;
+            if (file.Open(entry, true)){            
+              do {
+                uint length = 0;
+                int result = file.Find(search, -1, length);
+                searchedsize += file.GetPos();
+                User.StatusInc(searchedsize);
+                if (result >= 0)
+                  Folder.AddBookmark(entry, file.GetPos(), length, "Keyword: " + list.GetChild(result).Name(), BookmarkClass::SHOWREPORT, BookmarkClass::LOWASCII);
+                file.Skip(length);
+              } while (result >=0);
+            }
+          }  
+        }
+      }
+      else
+      User.Message(UserClass::ICONSTOP, "Error!", "You must enter at least one keyword for search!");  
+    }
+  }
+
+  String GetHex(FileClass &file, int size) {
+    String result;
+    file.Skip(size-1);
+    for (int i = 0; i < size ; i++) {
+      int a = file.ReadInt(1);
+      file.Skip(-2);
+      for (int d = 1; d >= 0; d--) {
+        char b = (a >> (d * 4)) & 15;
+        b += b < 10 ? 48 : 55;
+        result += b;
+      }
+    }
+    file.Skip(size+1);
+    return result;
+  }
+  
+  void Xor (String keyword, String key){
+     FileClass plainkeyword, keyfile, cipheredkeyword;
+     BufferClass buffer,
+                 hexConversion;
+     String ciphered;
+     
+     long keylen, onekey, oneplain, onecipher, cipher, out;
+     keylen = key.GetLength();
+     keyfile.OpenString(key);
+     plainkeyword.OpenString(keyword);
+     buffer.Create(1000);
+     hexConversion.Create(10);
+     for (uint x=0; x < keyword.GetLength(); x++){
+       onekey = keyfile.Get();
+       oneplain = plainkeyword.Get();
+       cipher = onekey ^ oneplain;
+       hexConversion.Seek(0);
+       hexConversion.WriteInt(1, false, cipher);
+       hexConversion.Seek(0);
+       buffer.Write("\\x" + GetHex(hexConversion, 1));
+       //Console.WriteLine(onekey + "\t\t\t\t" + oneplain + "\t\t\t\t" + cipher + "\t\t\t\t" + keyfile.GetPos());
+       if (keyfile.Peek() == FileClass::EOF)
+         keyfile.Seek(0);   
+     } 
+     String searchterm;
+     buffer.Seek(0);
+     buffer.ReadUnicode(searchterm, buffer.GetSize(), 0);
+     if (dialogbox.Check)
+       searchterm = "[\\x00-\\xff]{4,4}[\\x00\\x06\\x20]{4,4}[\\x00\\x01\\x20]{4,4}[\\x00-\\xff]{4,4}" + searchterm;
+     Console.WriteLine("search term is: " + searchterm);
+     search.Add(searchterm,FileClass::GREP);
+   }
+}

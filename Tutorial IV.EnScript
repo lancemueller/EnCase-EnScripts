@@ -1,0 +1,24 @@
+
+
+  class MainClass {
+    void Main(CaseClass c) {
+      forall (EntryClass entry in c.EntryRoot()){
+        if (entry.Name() == "boot.ini"){
+          Console.WriteLine(entry.FullPath());
+          EntryFileClass file;                      // create EntryFileClass variable
+          file = new EntryFileClass();              // initialize the variable
+          file.Open(entry);                         // open the file currently pointed to by the entry variable
+          file.SetCodePage(CodePageClass::ANSI);    // set the codepage to ANSI
+          String text;                              // create a string variable to hold a line of text as we read the file, line by line
+          do {                                      // enter a DO loop and continue until the condition is met on the WHILE line below
+            file.ReadString(text, -1, "\x0d\x0a");  // read a line of text until a carriage return and line feed charater is encountered
+            if (text.Contains("default=")){         // if the line we just read contains "default=" then its the line we want
+              Console.WriteLine(text);              // If the line contains the "default=" text then print the entire line to the console
+              break;                                // break out of the loop since we found what we wanted and there is no need to continue reading
+            }
+
+          } while (file.Peek() != FileClass::EOF);  // exit the loop when we reach the end of the file, we only get here if the data we are looking for is never found
+        }
+      }
+    }
+  }

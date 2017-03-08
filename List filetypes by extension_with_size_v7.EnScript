@@ -1,0 +1,45 @@
+//    lance@forensickb.com
+//    04/1/2015
+
+
+class MainClass {
+  NameListClass list;
+  void Parse(CaseClass &c){
+    for (ItemIteratorClass iter(c, NOPROXY | NORECURSE); EntryClass e = iter.GetNextEntry();) {
+      if (e.Extension()){
+        String lowerext = e.Extension();
+        lowerext.ToLower();
+        NameListClass temp = list.Find(lowerext);
+        if (temp){
+          NameListClass t = new NameListClass (temp, e.Name(),0);
+          new NameListClass (t, e.LogicalSize(),0);
+        }
+        else {
+         NameListClass temp2 = new NameListClass (list, lowerext,0);
+         NameListClass temp3 = new NameListClass (temp2, e.Name(),0);
+         new NameListClass (temp3, e.LogicalSize(),0);
+        }
+      }
+    }
+  }
+
+  void Main(CaseClass c) {
+    SystemClass::ClearConsole(1);
+    list = new NameListClass();
+    LocalFileClass local();
+    local.Open(c.ExportFolder() + "\\" + "File Count by extension.csv", FileClass::WRITE);
+    Parse(c);
+
+    foreach (NameListClass l in list){
+      long totalsize;
+
+      foreach(NameListClass e in l){
+        foreach (NameListClass s in e){
+          totalsize+= long::Convert(s.Name(), int::DECIMAL);
+        }
+      }
+      Console.WriteLine("Extension: " + l.Name() + "\tCount: " + l.Count() + "\tSize:" + totalsize);
+      local.WriteLine(l.Name() + "\t" + l.Count() + "\t" + totalsize);
+    }
+  }
+}

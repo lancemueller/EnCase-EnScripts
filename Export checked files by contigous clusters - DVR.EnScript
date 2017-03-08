@@ -1,0 +1,26 @@
+class MainClass {
+  void Main(CaseClass c) {
+    if (c){
+      String export = c.ExportFolder() + "\\Files Exported based on sequential clusters and file size\\";
+      if (LocalMachine.CreateFolder(export)){
+        forall(EntryClass entry in c.EntryRoot()){
+          if (entry.IsSelected()){
+            DeviceClass dev = entry.GetDevice();
+            EntryFileClass file();
+            LocalFileClass local();
+            file.Open(dev);
+            file.Seek(entry.PhysicalLocation());
+            if (local.Open(export + entry.Name(), FileClass::WRITE)){
+              local.WriteBuffer(file, entry.LogicalSize());
+              local.Close();
+            }
+            else
+              SystemClass::Message(16,"Error", "Could not create output file, check your case default export folder path and try again");
+          }
+        }
+      }
+      else
+        SystemClass::Message(16,"Error", "Could not create output folder, check your case default export folder path and try again");
+    }
+  }
+}

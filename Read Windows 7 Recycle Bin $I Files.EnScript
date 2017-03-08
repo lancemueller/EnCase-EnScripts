@@ -1,0 +1,82 @@
+/*
+
+Windows 7 Recycle Bin Report (Version: 1.0)
+
+Select $I files found in the Windows 7 $Recycle.Bin folder that you want decoded
+
+Enscript will create a tab-delimited file in the case export folder
+
+Created by: Bruce W. Pixley, CISSP, EnCE
+Date: 12/1/2010
+
+*/
+
+class MainClass {
+  void Main(CaseClass c) {                                              // Execution starts here
+
+  LocalFileClass local();
+
+  SystemClass::ClearConsole(1);                                         // Clear the console
+
+  EntryFileClass ef();
+
+  local.Open(c.ExportFolder() + "\\RecycleBin.txt", FileClass::WRITE);  // Settings for tab-delimited export and write column header
+
+  local.Write("Windows Recycle Bin Record" + "\t" + "Deleted File Name" + "\t" + "Deleted File Size" + "\t" + "Deleted Date/Time" + "\n");
+
+  forall (EntryClass e in c.EntryRoot()) {
+
+    if(e.IsSelected()) {
+
+      ulong filesize;                                                     // Set variables to store file information
+      String filename;
+      DateClass deleted();
+
+      Console.WriteLine("Selected File: " + e.FullPath() + "\n");      // Write to console
+
+      ef = new EntryFileClass();
+      ef.Open(e);
+      ef.SetCodePage(CodePageClass::UNICODE);
+
+      do {
+
+        ef.Skip(8);
+
+        filesize = ef.ReadBinaryInt(8,false);                           // Read deleted file size
+
+        ef.ReadWinDate(deleted);                                        // Read 8-byte deleted date/time stamp
+
+        ef.ReadString(filename, -1, "\x00\x00");                        // Read Unicode filename; ends in Hex 00 00
+
+        Console.WriteLine("Deleted File Name: " + filename);            // Write to console
+
+        Console.WriteLine("Deleted File Size: " + filesize);            // Write to console
+
+        Console.WriteLine("Deleted Date/Time: " +
+                          deleted.GetString(DateClass::GetDateFormat(),
+                          DateClass::GetTimeFormat(),
+                          e.GetTimeZoneBias()));                        // Write to console and get time zone setting from case
+
+        Console.WriteLine("\n" + "Writing output to tab-delimited TXT file" + "\n");
+
+        local.Write(e.FullPath() + "\t" +
+                    filename + "\t" +
+                    filesize + "\t" +
+                    deleted.GetString(DateClass::GetDateFormat(),DateClass::GetTimeFormat(),e.GetTimeZoneBias()) +
+                    "\n");                                              // Write output to tab-delimited TXT file
+
+        Console.WriteLine("[End of File]" + "\n");                      // Write to console
+
+        break;                                                          // Finished reading file; break
+
+      } while (ef.Peek() != FileClass::EOF);                            // Close DO loop
+
+    }                                                                   // Close IF loop
+
+  }                                                                     // Close FORALL loop
+
+  Console.WriteLine("\n" + "DING! Enscript Finished");
+
+  }
+
+}                                                                 // Execution stops here

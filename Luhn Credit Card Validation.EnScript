@@ -1,0 +1,139 @@
+/*
+lance (at) forensickb.com
+June 2, 2008
+
+*/
+
+
+class MyDialog: DialogClass {
+  String ccNum, Desc;
+  ButtonClass        _Help;
+  StringEditClass _ccNum;
+
+
+  MyDialog():
+  Desc(     "LUHN Credit Card Number Validation v1.0\n"
+            "This EnScript uses the LUHN algorithm to test the entered credit card\n"
+            " number and then tries to identify the credit card type by the first few digits.\n\n"
+            "lance (at) forensickb.com\n"
+            "June 02, 2008"
+          );
+
+    DialogClass(null, "LUHN credit card number validation"),
+    _Help(this, "Info", START, START, DEFAULT, DEFAULT, 0),
+    _ccNum(this, "Credit card number:", START, NEXT, 200, 10, 0, ccNum, 20, WindowClass::REQUIRED)
+
+  {
+  }
+
+   virtual void ChildEvent(const EventClass &event) {
+    if (_Help.Matches(event))
+      SystemClass::Message(SystemClass::MBOK, "Info", Desc);
+    DialogClass::ChildEvent(event);
+  }
+
+  virtual bool CanClose() {
+    return true;
+  }
+}
+
+class MainClass {
+
+  String digits, type;
+
+  void Main() {
+    MyDialog dialogbox();
+    if (dialogbox.Execute() == SystemClass::OK){
+      bool luhn =isValidNumber(dialogbox.ccNum);
+
+      if (dialogbox.ccNum.GetLength() < 13 || dialogbox.ccNum.GetLength() > 19){
+        Console.WriteLine("The credit card number is either too short or too long. (<13 or >19)");
+        SystemClass::Message(0, "Notice", "The credit card number is either too short or too long. (<13 or >19)");
+      }
+
+      else if (type.Contains("Unknown")){
+        Console.WriteLine("The credit card number passes the LUHN validation test, but the number sequence does not belong to a known vendor");
+        SystemClass::Message(0, "Notice", "The credit card passes the LUHN validation test, but the number sequence does not belong to a known vendor");
+      }
+      else if (luhn) {
+        Console.WriteLine ("The credit card number entered passes the LUHN validation test and is identified as belonging to " + type);
+        SystemClass::Message(0, "Notice", "The credit card number entered passes the LUHN validation test and is identified as belonging to " + type);
+      }
+      else{
+        Console.WriteLine ("The credit card number entered is *not* valid");
+        SystemClass::Message(0, "Notice", "The credit card number entered is *not* valid");
+      }
+    }
+  }
+
+
+  bool isValidNumber(String &number) {
+
+    int len = number.GetLength();
+
+    if (len == 16){
+      String begining1 = number.SubString(0, 1);
+      String begining2 = number.SubString(0, 2);
+      String begining4 = number.SubString(0, 4);
+      if (begining1 == "4")
+        type = "VISA";
+      else if (begining2 == "51" || begining2 == "52" || begining2 == "53" || begining2 == "54" || begining2 == "55")
+        type = "MASTERCARD";
+      else if (begining4 == "6011")
+        type = "DISCOVER";
+      else if (begining2 == "35")
+        type = "JCB";
+      else {
+        type = "Unknown Type-16";
+      }
+    }
+    else if (len == 15){
+      String begining2 = number.SubString(0, 2);
+      String begining4 = number.SubString(0, 4);
+      if (begining2 == "34" || begining2 == "37")
+        type = "AMEX";
+      else if (begining4 == "1800" || begining4 == "2131")
+        type = "JCB";
+      else {
+        type = "Unknown Type-15";
+      }
+    }
+    else if (len ==14) {
+      String begining2 = number.SubString(0, 2);
+      String begining3 = number.SubString(0, 3);
+      if (begining2 == "36" || begining2 == "38" || begining3 == "300" || begining3 == "301" || begining3 == "302" || begining3 == "303" || begining3 == "304" || begining3 == "305")
+        type = "DINERS";
+      else {
+        type = "Unknown Type-14";
+
+      }
+    }
+    else if (len == 13){
+      String begining1 = number.SubString(0, 1);
+      if (begining1 == "4")
+        type = "VISA";
+      else {
+        type == "Unknown Type-13";
+
+      }
+    }
+
+    int sum;
+    bool alternate = false;
+    int n;
+    for (int i = number.GetLength() - 1; i >= 0; i--) {
+      n = int::Convert(number[i], int::DECIMAL);
+
+      if (alternate) {
+        n *= 2;
+        if (n > 9) {
+          n = (n % 10) + 1;
+        }
+      }
+
+      sum += n;
+      alternate = !alternate;
+  }
+  return (sum % 10 == 0);
+  }
+}

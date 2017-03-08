@@ -1,0 +1,105 @@
+/*
+
+Preview/load a Windows Vista system in EnCase6. Select all the files in the "System Volume Information" folder
+that have a hexidecimal name (GUID).
+
+This EnScript searches each selected file for a HEX keyword (\x01\x10\x08\x00\xCC\xCC\xCC\xCC)
+that appears to be present in every 'record'. It then exports each valid record and bookmarks them for review.
+
+Exported files can then be zipped, rar'd or otherwise archived and sent to me at the email address below,
+after you review them for sensitive information.
+
+lance (at) forensickb.com
+
+*/
+
+
+
+class MainClass {
+  SearchClass Search;
+  BookmarkFolderClass Folder; // create a folder variable to later put bookmarks into
+
+  MainClass() // constructor
+  {
+    Search = new SearchClass(); // create a new search onject
+  }
+
+  void Recurse (EntryClass entry, CaseClass &c){
+    EntryFileClass file();  // create a file I/O object
+    forall(EntryClass e in entry) { // recurse each entry in EnCase
+      if(e.IsSelected()) {  // only proces files that are selected
+        if(file.Open(e, EntryFileClass::SLACK || EntryFileClass::NOUNERASE)){  // open the file and prepare to search it
+          if (Search.Create()){  // create search object with keywords
+            SystemClass::StatusRange("Searching " + e.Name(), e.PhysicalSize()); // update status display
+            if(Search.Find(file, -1, -1, SearchClass::STATUSUPDATE) > 0) {  // search file
+              SystemClass::StatusRange(Search.GetHits().Count() + " Hits Found, Processing Hits!", Search.GetHits().Count()); // update status display
+              forall(SearchClass::HitClass h in Search.GetHits()) {  // process each search hit found
+                SystemClass::StatusInc(1);  // increment the status display
+                bool valid = ValidateHit(h, file);  // validate the hit
+                if (valid) { // only process those hits that appear to be valid based on the sanity check of the validate function below
+                  Bookmark(h, file, e);  // call bookmark function  to bookmark the hit
+                  Export(h, file, c, e);  // call export function to export the hit
+                  Console.WriteLine(h.Offset() + "   " + e.Name()); // write info to the console
+                }
+              }
+            }
+            else {
+              Console.WriteLine(e.Name() + " did not contain any search hits!"); // write to the console if there were no hits in this file
+            }
+          }
+        }
+      }
+    }
+  }
+
+
+  bool ValidateHit (SearchClass::HitClass &h, EntryFileClass &file){
+    /*
+    This function validates the search hit by checking to see how bit the record in (length) and to see if there is a FILETIME value
+    40 bytes after the begining of the search hit.
+    */
+    DateClass date; // create a date variable to hold the FILETIME value we are going to try and read
+    file.Seek(h.Offset() + 8);  // move to where the search hit is + 8 (skip over the search hit)
+    uint length = file.ReadBinaryInt(8); // read the length field to see how big this record is
+    file.Skip(24);  // skip to where the FILETIME field normally is in the record
+    file.ReadWinDate(date);  // read 8 bytes and store them as a WIN32 FILETIME value
+    if (date.IsValid() && length < 3000)  // check to see if the value we stored is a valid date and just to make sure, check to see if the record length is smaller than 3000 bytes
+      return true;  // return true if above check is true
+    else
+      return false; // return false and skip this hit
+  }
+
+  void Export (SearchClass::HitClass &h, EntryFileClass &file, CaseClass &c, EntryClass &e){
+     /*
+    This function exports the search hit out to your default export folder with a .dump extension
+    */
+    LocalFileClass local();  // create a localfile variable
+    file.Seek(h.Offset() + 8 );  // seek to the search hit + 8 (skip over the search hit)
+    uint length = file.ReadBinaryInt(4); // read the length field to see how big this record is
+    file.Seek(h.Offset()); //seek to where the search hit begins
+    if (length > 5000) // sanity check to see if the search hit is larger than 500 bytes (never seen one this big)
+      length = 5000; // if its larger than 5000, set the length to 500 so we dont end up exporting the entire drive if this is an invalid record
+    if (local.Open(c.ExportFolder() + "\\" + e.Name() + " - " + h.Offset() + ".export", FileClass::WRITE)){ //create a local file using the local variable named the same as where the search hit was foubnd and the offset
+      local.WriteBuffer(file, length + 16); //copy the record from the "file" variable to the "local" variable ( to a local file)
+    }
+  }
+
+
+  void Bookmark (SearchClass::HitClass &h, EntryFileClass &file, EntryClass &e){
+     /*
+    This function bookmarks the search hit and complete record for later review
+    */
+    file.Seek(h.Offset() + 8 ); // seek to the search hit + 8 (skip over the search hit)
+    uint length = file.ReadBinaryInt(4); // read the length field to see how big this record is
+    if (length > 5000) // sanity check to see if the search hit is larger than 500 bytes (never seen one this big)
+      length = 5000; // if its larger than 5000, set the length to 500 so we dont end up bookmarking the entire drive if this is an invalid record
+    Folder.AddBookmark(e, h.Offset(), length + 16, "Restore Information", 0, BookmarkClass::HIGHASCII); // make the bookmark
+  }
+
+  void Main(CaseClass c) {
+    SystemClass::ClearConsole(); // clear the console
+    Search.AddKeyword("\\x01\\x10\\x08\\x00\\xCC\\xCC\\xCC\\xCC", KeywordClass::GREP); //add the keyword to locate the shadow record
+    Folder = new BookmarkFolderClass(c.BookmarkRoot(), "System Restore Information");  // create a new bookmark folder to put bookmarks into
+    Recurse(c.EntryRoot(), c); // call the recurse function and begin to recurse the file to see which ones we should search
+  }
+}

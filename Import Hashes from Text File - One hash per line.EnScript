@@ -1,0 +1,121 @@
+/*
+lance.mueller@gmail.com
+http://www.forensickb.com
+06/30/07
+
+This EnScript reads a non-unicode text file with one hash value per line.
+example:
+
+1fd48b7580e9e9fe8745f215fd5d2bdc
+c138b98557fb5ec424f068a4e6c6472b
+d796528c9feb65f25a19005a18bad6ac
+
+*/
+
+class MyDialog: DialogClass {
+
+  PathEditClass   _file1;
+  String textfile, nameofhashfile, category;
+  StringEditClass _Edit1,
+                  _Edit2;
+  MyDialog():
+
+    DialogClass(null, "Import text file into .hash file"),
+    _file1(this, "Please select the text file you wish to import",START, NEXT, 250, 12, 0, textfile , WindowClass::FILEOPEN),
+    _Edit1(this, "Name of .hash file to create: (placed in your default export folder)", START, NEXT, 160, DEFAULT, 0, nameofhashfile, 1000, 0),
+    _Edit2(this, "Category", START, NEXT, 160, DEFAULT, 0, category, 19, WindowClass::REQUIRED)
+
+  {
+   category = "Known";
+  }
+}
+
+class MainClass {
+  void Main(CaseClass c) {
+    LocalFileClass local(), outfile();
+    NameListClass temp(), list();
+    String line;
+    SystemClass::ClearConsole();
+    uint counter;
+
+    MyDialog dialogbox();
+    if (dialogbox.Execute() == SystemClass::OK){
+      if (local.Open(dialogbox.textfile)){
+        local.SetCodePage(0);
+        if (local.Peek() != FileClass::EOF){
+          String tmp;
+          local.ReadString(tmp,2,"");
+
+
+          if (tmp == "\xFF\xFE"){
+
+            local.SetCodePage(CodePageClass::UNICODE);
+            local.Seek(2);
+
+          }
+          else {
+            local.Seek(0);
+          }
+
+
+        }
+        while (local.Peek() != FileClass::EOF) {
+          local.ReadString(line, 100, "\r");
+          if (line){
+            line.Replace("\n","");
+            line.Replace("\r","");
+            line.Replace("\t","");
+            line.Replace(" ","");
+            list.Parse(line, ",", 0);
+            //new NameListClass(list, temp.LastChild().Name());
+          }
+        }
+        counter = list.Count();
+
+        if (outfile.Open(c.ExportFolder() + "\\" + dialogbox.nameofhashfile + ".hash", FileClass::WRITE)){
+          outfile.SetCodePage(CodePageClass::ANSI);
+          outfile.Write("HASH\r\n");
+          outfile.WriteBinaryInt(0x000200FF, 4);
+          outfile.WriteBinaryInt(0x00010000, 4);
+          outfile.WriteBinaryInt(0x0000, 2);
+          outfile.WriteBinaryInt(counter, 4);
+          for (int i = 0 ; i < 1012; ++i)
+            outfile.WriteBinaryInt(0, 1);
+
+          uint namelen = dialogbox.nameofhashfile.GetLength() * 2;
+          outfile.SetCodePage(CodePageClass::UNICODE);
+          outfile.Write(dialogbox.nameofhashfile);
+          outfile.SetCodePage(CodePageClass::ANSI);
+
+          for (uint i = 1; i <= (80-namelen); ++i)
+            outfile.WriteBinaryInt(0, 1);
+
+
+          outfile.SetCodePage(CodePageClass::UNICODE);
+          outfile.Write(dialogbox.category);
+          int filler = 40 - (2 * dialogbox.category.GetLength());
+          outfile.SetCodePage(CodePageClass::ANSI);
+          for (int i = 0; i < filler; ++i)
+            outfile.WriteBinaryInt(0, 1);
+
+
+          uint total;
+          foreach (NameListClass n in list) {
+
+            String hash = n.Name();
+            for (int i = 0; i < 16; ++i) {
+              uint val = uint::Convert(hash.SubString((i * 2), 2), int::HEX);
+              outfile.WriteBinaryInt(val, 1);
+            }
+            outfile.WriteBinaryInt(0, 2);
+            Console.WriteLine("added " + hash);
+            total++;
+
+          }
+          Console.WriteLine (total + " hashes were added to the file: " + c.ExportFolder() + "\\" + dialogbox.nameofhashfile + ".hash");
+
+        }
+      }
+    }
+  }
+}

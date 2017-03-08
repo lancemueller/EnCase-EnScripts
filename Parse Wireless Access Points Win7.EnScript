@@ -1,0 +1,84 @@
+class MainClass {
+  void Main(CaseClass c) {
+    SystemClass::ClearConsole(1);
+    if (c){
+      BookmarkFolderClass folder(c.BookmarkRoot(), "Wireless Networks");
+
+      forall (EntryClass entry in c.EntryRoot()){
+        if (entry.Name().Compare("software") == 0){
+          Console.Write("Checking..... " + entry.FullPath());
+          VolumeClass volume = entry.MountVolume(false);
+          if (volume){
+            EntryClass e1 = volume.FirstChild();
+            EntryClass e2 = e1.Find("Microsoft\\Windows NT\\CurrentVersion\\NetworkList\\Signatures\\Unmanaged");
+            if (e2){
+            Console.WriteLine("\n----------------------------------------------------------------");
+              foreach (EntryClass e3 in e2){
+                BookmarkFolderClass folder2(folder, e3.Name());
+                folder2.AddBookmark(entry, 0, 0, "Wireless Network Found", 0, BookmarkClass::LOWASCII);
+                Console.WriteLine("Last Written: " + e3.Written().GetString());
+                folder2.AddNote("Last Written: " + e3.Written().GetString(), 0, 0, 0);
+
+
+                foreach (EntryClass e in e3){
+                  if (e.Name() == "Description"){
+                    String desc;
+                    EntryFileClass file();
+                    file.Open(e);
+                    file.ReadString(desc);
+                    Console.WriteLine("SSID:         " + desc);
+                    folder2.AddNote("SSID:         " + desc, 0, 0, 0);
+                    //AddNote (const String &Comment, int indent, int Size, uint Options
+                  }
+                  if (e.Name() == "DnsSuffix"){
+                    String suffix;
+                    EntryFileClass file();
+                    file.Open(e);
+                    file.ReadString(suffix);
+                    Console.WriteLine("DNS Suffix:   " + suffix);
+                    folder2.AddNote("DNS Suffix:   " + suffix, 0, 0, 0);
+
+
+                  }
+                  if (e.Name() == "FirstNetwork"){
+                    String first;
+                    EntryFileClass file();
+                    file.Open(e);
+                    file.ReadString(first);
+                    Console.WriteLine("FirstNetwork: " + first);
+                    folder2.AddNote("FirstNetwork: " + first, 0, 0, 0);
+
+
+                  }
+                  if (e.Name() == "DefaultGatewayMac"){
+                    String mac;
+                    EntryFileClass file();
+                    file.Open(e);
+                    for (uint x =1; x<= 6; x++){
+                      uint m = file.ReadBinaryInt(1);
+                      if (x< 6){
+                        String temp = String::FormatInt(m, int::HEX);
+                        if (temp.GetLength() == 1)
+                          temp = "0" + temp;
+                        mac += temp + ":";
+                      }
+                      else{
+                        mac += String::FormatInt(m, int::HEX);
+                      }
+                    }
+                    mac.ToUpper();
+                    Console.WriteLine("BSSID/MAC:    " + mac);
+                    folder2.AddNote("BSSID/MAC:    " + mac, 0, 0, 0);
+                  }
+                }
+                Console.WriteLine("");
+              }
+            }
+            else
+            Console.WriteLine("........Key not found: " + "Microsoft\\Windows NT\\CurrentVersion\\NetworkList\\Signatures\\Unmanaged");
+          }
+        }
+      }
+    }
+  }
+}

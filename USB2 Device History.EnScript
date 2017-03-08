@@ -1,0 +1,210 @@
+/*
+lance mueller
+digitdetective@gmail.com
+http://www.forensickb.com
+July 21, 2007
+
+*/
+
+class MainClass {
+  String device,
+         type,
+         vendor,
+         product,
+         friendlyname,
+         prefixid,
+         serial,
+         Siginhex,
+         USB,
+         postfix;
+
+  uint startprodname,
+       stopprodname,
+       starttypename,
+       stoptypename,
+       startvenname,
+       stopvenname,
+       signature,
+       offset;
+
+  DateClass  lastwrittendate;
+
+  NameListClass prefixids,
+                USBserial;
+
+
+  MainClass() :
+    prefixids(),
+    USBserial()
+  {
+
+  }
+
+  void GetRoots(VolumeClass &volume, EntryClass &Select, EntryClass &DefaultCC, EntryClass &MountedDevices, EntryClass &USBSTOR, EntryClass &DeviceClass1, EntryClass &DeviceClass2){
+    EntryClass SystemBase = volume.FirstChild();
+    Select = SystemBase.Find("Select\\Current");
+    MountedDevices = SystemBase.Find("MountedDevices");
+
+
+    EntryFileClass selectfile();
+    if (selectfile.Open(Select)){
+      selectfile.SetCodePage(0);
+      uint cc = selectfile.ReadBinaryInt(4, false);                     // read the default control set
+      String defaultcc = String::FormatInt(cc, int::BaseTypes base=int::DECIMAL);
+      DefaultCC = SystemBase.Find("ControlSet00" + defaultcc);
+      USBSTOR = DefaultCC.Find("Enum\\USBSTOR");
+      DeviceClass1 = DefaultCC.Find("Control\\DeviceClasses\\{53f56307-b6bf-11d0-94f2-00a0c91efb8b}");
+      DeviceClass2 = DefaultCC.Find("Control\\DeviceClasses\\{53f5630d-b6bf-11d0-94f2-00a0c91efb8b}");
+    }
+  }
+
+  void GetUSBSTOR(EntryClass &USBSTOR){
+    Console.WriteLine("USBSTOR:\nType\t Vendor\t Product\t Serial_Number\t Friendly_Name\t USB_Driver Last_Written_Date \t ParentIDPrefix");
+    foreach (EntryClass e in USBSTOR){
+      EntryClass tmp;
+      device = e.Name();
+
+      starttypename = 0;
+      stoptypename = device.Find("&");
+      type = device.SubString(starttypename, stoptypename);
+
+      startvenname = device.Find("&Ven_");
+      stopvenname = device.Find("&", startvenname+1);
+      vendor = device.SubString(startvenname+5, stopvenname-(startvenname+5));
+
+      startprodname = device.Find("Prod_");
+      stopprodname = device.Find("&", startprodname, -1,0);
+      product = device.SubString(startprodname+5, stopprodname-(startprodname+5));
+      foreach (EntryClass e2 in e){                    // Recurse into Serialnumber folder to get device details
+        serial = e2.Name();
+        tmp = e2.Find("FriendlyName");
+        if (tmp){
+          EntryFileClass tempfile();
+          if (tempfile.Open(tmp)){
+            tempfile.SetCodePage(CodePageClass::UNICODE);
+            tempfile.ReadString(friendlyname);
+            tempfile.Close();
+            tmp = e2.Find("ParentIdPrefix");
+            if (tmp && tempfile.Open(tmp)){
+              tempfile.SetCodePage(CodePageClass::UNICODE);
+              tempfile.ReadString(prefixid);
+              tempfile.Close();
+              new NameListClass (prefixids, prefixid);
+              new NameListClass (USBserial, serial);
+            }
+            else
+              prefixid = "NONE";
+            Console.WriteLine(type + "\t" + vendor + "\t" + product + "\t" + serial + "\t" + friendlyname + "\t" + e2.Written().GetString(DateClass::SHOWTIME) + "\t" + prefixid);
+          }
+        }
+      }
+    }
+  }
+
+  void GetMountedDevices(EntryClass &MountedDevices){
+    Console.WriteLine("\n\n\nMounted_Devices:");
+    foreach (EntryClass e in MountedDevices){
+      postfix="";
+      if (e.Name().Contains("DosDevices")){
+        EntryFileClass tempfile();
+        if (tempfile.Open(e)){
+          tempfile.SetCodePage(0);
+          if (e.LogicalSize() == 12){
+            signature = tempfile.ReadBinaryInt(4);
+            Siginhex = String::FormatInt(signature, int::BaseTypes base=int::HEX);
+            offset = tempfile.ReadBinaryInt(8);
+            Console.WriteLine(e.Name() + "\t" + "DiskSignature: " + Siginhex + "\t" + "VolumeByteOffsetStart: " + offset);
+          }
+          else {
+            tempfile.SetCodePage(CodePageClass::UNICODE);
+            tempfile.ReadString(USB);
+
+            foreach (NameListClass n in prefixids){
+              //Console.WriteLine(n.Name());
+              if (USB.Contains(n.Name())){
+                uint index = n.Index();
+                String serial = USBserial.GetChild(index).Name();
+                postfix = "USB Device Serial#: " + serial + " was last assigned to this drive letter";
+
+              }
+            }
+            Console.WriteLine(e.Name() + "\t" + USB + "\t" + postfix);
+          }
+        }
+    }
+  }
+}
+
+  void GetDevices1 (EntryClass &DeviceClass1){
+    Console.WriteLine("\n\n\n\\DeviceClasses\\{53f56307-b6bf-11d0-94f2-00a0c91efb8b}:\nType\tVendor\tProduct\tRevision\tSerial_Number\tDriver\tLast_Written_Date");
+    foreach (EntryClass e in DeviceClass1){
+      if (e.Name().Contains("USBSTOR")){
+        String name = e.Name().SubString(21, e.Name().GetLength() - 21);
+        name.Replace("&Prod_", "\t");
+        name.Replace("&Rev_", "\t");
+        name.Replace("#","\t");
+        Console.WriteLine("Disk\t" + name + "\t" + e.Written().GetString(DateClass::SHOWTIME));
+      }
+
+      //Console.WriteLine(e.Name());
+    }
+  }
+
+  void GetDevices2 (EntryClass &DeviceClass2){
+    Console.WriteLine("\n\n\n\\DeviceClasses\\{53f5630d-b6bf-11d0-94f2-00a0c91efb8b}:\nType1\tType2\tSerial_Number\tSignaure\tOffset\tLength\tDriver\tLast_Written_Date");
+    foreach (EntryClass e in DeviceClass2){
+
+
+        String name = e.Name().SubString(4, e.Name().GetLength() - 4);
+        if (name.Contains("IDE")){
+          name.Replace("#{", "\t\t\t\t");
+          name.Replace("#", "\t");
+
+        }
+        else if (name.Contains("SCSI")){
+          name.Replace("#{", "\t\t\t\t");
+          name.Replace("#", "\t");
+        }
+        else if (name.Contains("STORAGE#VOLUME")){
+          name.Replace("OFFSET", "\t");
+          name.Replace("#", "\t");
+          name.Replace("SIGNATURE", "\t");
+          name.Replace("LENGTH","\t");
+        }
+        else if (name.Contains("STORAGE#Removable")){
+          name.Replace("RM#", "\t\t\t\t");
+          name.Replace("#", "\t");
+        }
+        else if (name.Contains("USBSTOR")){
+          name.Replace("#{", "\t\t\t");
+          name.Replace("#", "\t");
+        }
+
+        Console.WriteLine(name + "\t" + e.Written().GetString(DateClass::SHOWTIME));
+
+    }
+  }
+
+  void Main(CaseClass c) {
+    SystemClass::ClearConsole();
+    forall (EntryClass entry in c.EntryRoot()){
+      if ((entry.FullPath().Contains("system32\\config") && !entry.FullPath().Contains("regback"))){
+        VolumeClass volume;
+        if (entry.Name().Compare("SYSTEM") == 0){
+          //Console.WriteLine(entry.FullPath());
+          volume = entry.MountVolume(false);
+          if (volume){
+            EntryClass Select, DefaultCC, MountedDevices, USBSTOR, DeviceClass1, DeviceClass2;
+            GetRoots(volume, Select, DefaultCC, MountedDevices, USBSTOR, DeviceClass1, DeviceClass2);
+            if (Select && DefaultCC && MountedDevices && USBSTOR && DeviceClass1 && DeviceClass2){
+              GetUSBSTOR (USBSTOR);
+              GetDevices1(DeviceClass1);
+              GetDevices2(DeviceClass2);
+              GetMountedDevices(MountedDevices);
+            }
+          }
+        }
+      }
+    }
+  }
+}

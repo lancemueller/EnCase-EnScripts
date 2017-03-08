@@ -1,0 +1,46 @@
+/*
+lance @ forensickb.com
+May 27, 2008
+EnCase 6.10
+
+Select the Search hits you wanted exported from the text file and then look in
+your case default export folder for a file named "searchhits.txt"
+
+
+*/
+
+
+class MainClass {
+  void Main(CaseClass c) {
+  EntryFileClass file();
+  LocalFileClass local();
+
+  SearchHitClass hit = c.SearchHitRoot();
+    local.Open(c.ExportFolder() + "\\" + "searchhits.txt", FileClass::WRITE);
+    local.SetCodePage(0);
+    forall (SearchHitClass h in hit){
+      if (h.IsSelected() && h.GetEntry()){
+        file.Open(h.GetEntry());
+        file.SetCodePage(0);
+        file.Seek(h.FileOffset());
+        FindBeginning (file);
+        String line;
+        file.ReadString(line, -1, "\r");
+        local.Write(line+"\r\n");
+      }
+    }
+  }
+
+  void FindBeginning (FileClass &file){
+    bool begin;
+    while (begin == false){
+      file.Skip(-1);
+      uint temp = file.Get();
+      if (temp == 0x0a)
+        begin = true;
+      else {
+        file.Skip(-1);
+      }
+    }
+  }
+}

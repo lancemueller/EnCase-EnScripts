@@ -1,0 +1,114 @@
+typelib FR "FEMCCTRL.FEMC"
+
+class MyDialog: DialogClass {
+
+  ButtonClass     _Help;
+  StringEditClass _User,_Password,  _Domain, _Machines;
+  String Desc, username, password, machines, domain;
+
+MyDialog():
+
+    Desc(       "F-Response"
+                "Last Updated:\t17 July 2012\n"
+                "Latest Test:\tEnCase 6.18\n\n"
+                "Lance Mueller\n"
+                "lance@forensickb.com\n"
+                "http://www.forensickb.com"
+              );
+
+    DialogClass(null, "F-Response"),
+    _Help(this, "Help", START, START, 20, 10, 0),
+    _User(this, "Username:", START, NEXT, 200, 10, 0, username, 2000,  0),
+    _Password(this, "Password:", START, NEXT, 200, 10, 0, password, 2000,  0),
+    _Domain(this, "Domain (leave blank if workgroup):", START, NEXT, 200, 10, 0, domain, 2000,  0),
+    _Machines(this, "Targets (one IP or valid hostname per line):", START, NEXT, 200, 90, 0, machines, 2000,  0)
+
+  {
+    username = "test";
+    password = "test";
+    machines = "192.168.1.1";
+  }
+
+  virtual void ChildEvent(const EventClass &event) {
+    if (_Help.Matches(event))
+      SystemClass::Message(SystemClass::MBOK, "Help", Desc);
+    DialogClass::ChildEvent(event);
+  }
+
+
+
+}
+
+class MainClass {
+  void Main(CaseClass c) {
+    SystemClass::ClearConsole(1);
+    FR::FEMC femc;
+    MyDialog dialogbox();
+    if (dialogbox.Execute() == SystemClass::OK){    
+      if (femc.Create("")){
+        NameListClass list();
+        FR::ICredentialCollection creds;
+        creds = femc.Credentials();
+        creds.Add(dialogbox.username, dialogbox.domain, dialogbox.password);
+        FR::IMachineCollection machines;
+        machines = femc.Machines();
+        
+        dialogbox.machines.Replace(" ","");
+        list.Parse(dialogbox.machines, "\n");
+     
+        forall (NameListClass l in list){
+          Console.WriteLine("Adding: " + l.Name());
+          machines.Add(l.Name());
+        }
+        
+        foreach (FR::IMachine imachine in machines){
+          if (imachine.Status() == 0){
+            Console.WriteLine(imachine.MachineNameOrIP() + " is not available");
+           }
+           else {
+             if (imachine.Status() == 1)
+               imachine.InstallFResponse();
+               SystemClass::Sleep(1000);
+             if (imachine.Status() == 2)
+               imachine.StartFResponse();
+               SystemClass::Sleep(1000);
+             FR::ITargetCollection targets;
+            
+             targets = imachine.Targets();
+             foreach (FR::ITarget target in targets){
+               if (target.TargetName().Contains(":disk")){
+                 Console.WriteLine("F-Response Disk Target detected, " + target.TargetName());
+                 target.Login();
+                 Console.WriteLine("Target Disk added as \\PhysicalDrive" +target.PhysicalDiskMapping());
+                 Process(target.PhysicalDiskMapping(), c);
+                 target.Logout();
+               }
+             }
+             imachine.StopFResponse();
+             imachine.UninstallFResponse();
+             Console.WriteLine("Script Completed, F-Response Stopped and Removed");
+          }
+        }
+      }
+    }
+  }
+  
+  void Process(String target, CaseClass &c){
+    ConnectionClass con = LocalMachine;
+    DeviceInfoClass devicelist();
+    
+    if (devicelist.Create(con)) {
+      foreach (DeviceInfoClass di in devicelist) {
+        if (di.Name() == target){
+          DeviceClass d = di.Mount(c, 0);
+          EntryClass root = d.GetRootEntry();
+          forall(EntryClass entry in root){
+            if (entry.Name() == "pagefile.sys"){
+              Console.WriteLine(entry.FullPath() + "  LogicalSize: " + entry.LogicalSize() + "  Created Date: " + entry.Created().GetString());
+            }
+          }
+        }
+      }
+    }
+  }
+}

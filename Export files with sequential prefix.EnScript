@@ -1,0 +1,49 @@
+class MainClass {
+  void Main(CaseClass c) {
+    //Declare variables
+    EntryFileClass file();
+    LocalFileClass local(), log();
+    uint mastercounter;
+    ConnectionClass conn = LocalMachine;
+    DateClass date;
+
+    // Get current date & time
+    date.Now();
+    String datestring = date.GetString();
+
+    // Replace illegal filename characters that are in date & time string
+    datestring.Replace("/","-");
+    datestring.Replace(":","_");
+
+    //Create a unique export folder with the currect date & time as part of the folder name to avoid overwriting previous exports.
+    conn.CreateFolder(c.ExportFolder() + "\\Exported Files " + datestring);
+
+    // Create export log
+    if (log.Open(c.ExportFolder() + "\\Exported Files " + datestring + "\\log.csv", FileClass::WRITE)){
+      log.WriteLine("Full_Path,Export_Name,Extension,Created_Date,Last_Written,Last_Accessed,Logical_Size,Deleted");
+      //Recurse through all entries in case
+      forall (EntryClass entry in c.EntryRoot()){
+
+        // Check to see if current entry is selected
+        if (entry.IsSelected()){
+          file.Open(entry);
+          mastercounter++;
+          if (local.Open(c.ExportFolder() + "\\Exported Files " + datestring + "\\" + mastercounter + " - " + entry.Name(), FileClass::WRITE)){
+            local.WriteBuffer(file);
+            String isdeleted;
+            if (entry.IsDeleted())
+              isdeleted = "Yes";
+            else
+              isdeleted = "No";
+
+            log.WriteLine(entry.FullPath() + "," + mastercounter + " - " + entry.Name() + "," + entry.Extension() + "," + entry.Created().GetString() + "," + entry.Written().GetString() + "," + entry.Accessed().GetString() + "," + entry.LogicalSize() + "," + isdeleted + ",");
+          }
+          else
+            SystemClass::Message(16, "Error!", "Error opening export file");
+        }
+      }
+    }
+    else
+      SystemClass::Message(16, "Error!", "Error opening log file");
+  }
+}

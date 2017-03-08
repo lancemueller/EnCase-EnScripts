@@ -1,0 +1,163 @@
+/*
+//////////////////////  Guidance Software Inc. //////////////////////
+
+  GSI_BookmarkExporterLib.Enscript  VERSION 1.0      tested on EnCase V5                                           
+  
+  Maintenance History :
+  ===================
+  ver 1.0 : 15 March 2005
+            + port from EnCase V4
+  
+  
+  Notes:
+  -----
+  This script is released by Guidance Software Inc. as part of its 
+  Scripts package shipped with the Encase Software. 
+  
+  This library contains methods to export bookmark data to an Excel and/or
+  an HTML file.
+  
+  This library is a modification of the "GSI_BookmarkExporterLib" of
+  Encase V4.
+   
+
+  Report all bugs and queries to Enscript@GuidanceSoftware.com
+  
+/////////////////////////////////////////////////////////////////////
+*/
+include "GSI_ExportTableLib"
+include "GSI_LogLib"
+include "GSI_ModuleLib"
+
+//---//
+
+class BookmarkExporterClass {
+  NameListClass    Fields;
+  String           TableCategory,
+                   Delimiters,
+                   Prefix,
+                   Suffix,
+                   Path;
+  LogClass         Log;
+  ExportTableClass Table;
+  bool             ShouldExport;
+
+  BookmarkExporterClass():
+    Fields(),
+    Log(),
+    Table()
+  {
+    Log.Name        = "Exporter";
+    Log.CurPriority = LogClass::INFO;
+    ShouldExport    = true;
+    TableCategory   = "Events";
+    Delimiters      = "\t\n";
+    Prefix          = "";
+    Suffix          = ":";
+    ShouldExport    = false;
+  }
+  
+  void FormatKeyAndValue(String key, String value, String &app) {
+    app += key + ":" + Delimiters[0] + value + Delimiters[1];
+  }
+  
+  void InitializeNewFolder(const String &initialpath) {
+    Log.Debug("initialpath: " + initialpath);
+    if (ShouldExport) {
+      Path = initialpath;
+      Log.Debug("Creating folder: " + Path);
+      LocalMachine.CreateFolder(Path);
+      HostFileClass css(LocalMachine);
+      if (css.Open(Path + "\\gsi.css", HostFileClass::WRITETEXTCRLF)) {
+        css.Write("BODY { background-color: white; }\n"
+                  "DIV.intro { margin-left: 1%; max-width: 600px; margin-bottom: 25px; text-align: justify; }\n"
+                  "H1 { text-align: center; font-weight: bold; }\n"
+                  "H2 { text-align: center; font-weight: bold; }\n"
+                  "TABLE { width: 100%; background-color: black; font-size: smaller; text-align: right; }\n"
+                  "TR { background-color: white; }\n"
+                  "TH { text-align: center; }\n");
+      }
+    }
+  }
+
+  bool CreateTable(const String excelFileName, const String &filename, const String &title) {
+    String name = NameUtilClass::ReplaceIllegalChar(filename);
+    return ShouldExport && 
+           Table.CreateHTML(Path + "\\" + name, title, "gsi.css") && 
+           Table.CreateExcel(Path + "\\" + excelFileName, title);
+  }
+
+  void Write(const String &intro, ModuleBMFolderClass &folder) {
+    if (ShouldExport && folder) {
+      Table.BeginIntroduction();
+      Table.InsertParagraph(intro);
+      Table.EndIntroduction();
+      if (0 < Fields.Count()) {      
+        Table.BeginTable(TableCategory);
+        
+        Table.BeginRow();
+        for (NameListClass n = Fields.FirstChild(); n; n++) {
+          Table.InsertHeading(n.Name());
+        }
+        Table.EndRow();
+        Table.ExcelFile.HorizontalFreeze();  
+        uint i = 0;
+        for (BookmarkClass bm = folder.BookmarkFolder.FirstChild(); bm; bm++) {
+          Table.BeginRow();
+          NameListClass fieldValues = new NameListClass();
+          if (0 < fieldValues.Parse(bm.Comment(), Delimiters, 0)) {
+            for (NameListClass n = Fields.FirstChild(); n; n++) {
+              NameListClass tag = fieldValues.Find(Prefix + n.Name() + Suffix);
+              if (tag && (++tag)) {
+                Table.InsertCell(tag.Name());
+              }
+              else {
+                Table.InsertCell("");
+              }
+            }
+          }
+          Table.EndRow();
+        }
+        Table.EndTable();
+      }
+      Table.Close();
+    }  
+  }
+  
+  void Write(const String &intro, LogRecordClass &folder) {
+    if (ShouldExport && folder) {
+      Table.BeginIntroduction();
+      Table.InsertParagraph(intro);
+      Table.EndIntroduction();
+      if (0 < Fields.Count()) {      
+        Table.BeginTable(TableCategory);
+        
+        Table.BeginRow();
+        for (NameListClass n = Fields.FirstChild(); n; n++) {
+          Table.InsertHeading(n.Name());
+        }
+        Table.EndRow();
+        Table.ExcelFile.HorizontalFreeze();  
+        uint i = 0;
+        for (LogRecordClass bm = folder.FirstChild(); bm; bm++) {
+          Table.BeginRow();
+          NameListClass fieldValues = new NameListClass();
+          if (0 < fieldValues.Parse(bm.Comment(), Delimiters, 0)) {
+            for (NameListClass n = Fields.FirstChild(); n; n++) {
+              NameListClass tag = fieldValues.Find(Prefix + n.Name() + Suffix);
+              if (tag && (++tag)) {
+                Table.InsertCell(tag.Name());
+              }
+              else {
+                Table.InsertCell("");
+              }
+            }
+          }
+          Table.EndRow();
+        }
+        Table.EndTable();
+      }
+      Table.Close();
+    }  
+  }
+}

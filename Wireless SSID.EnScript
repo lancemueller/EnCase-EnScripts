@@ -1,0 +1,41 @@
+/*
+lance.mueller@gmail.com
+www.forensickb.com
+August 10, 2007
+
+*/
+
+class MainClass {
+  void Main(CaseClass c) {
+    SystemClass::ClearConsole();
+    forall (EntryClass entry in c.EntryRoot()){
+      if (entry.Name().Contains("software") && entry.FullPath().Contains("system32\\config")){
+        VolumeClass vol = entry.MountVolume(false);
+        if (vol){
+          VolumeClass newvol = vol.FirstChild();
+          VolumeClass wzcsvc = newvol.Find("Microsoft\\WZCSVC\\Parameters\\Interfaces");
+          if (wzcsvc){
+            Console.WriteLine("SSID\t\t\tDATE\n--------------------");
+            forall (VolumeClass e in wzcsvc){
+              //Console.WriteLine(e.Name());
+              if (e.Name().Contains("Static")){
+                EntryFileClass file();
+                if (file.Open(e)){
+                  file.SetCodePage(0);
+                  file.Seek(20);
+                  String name;
+                  DateClass date;
+
+                  file.ReadString(name,16,"");
+                  file.Seek(696);
+                  file.ReadWinDate(date);
+                  Console.WriteLine(name + "\t" + date.GetString(false));
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
