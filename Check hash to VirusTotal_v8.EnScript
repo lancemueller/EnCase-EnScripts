@@ -1,0 +1,210 @@
+
+/*
+
+Author:
+
+  Lance Mueller
+  Website: www.forensickb.com
+  Twitter: @lancemueller
+
+Usage:
+
+  This EnScript will generate a hash value for all executables & DLLs, based on file signature analysis
+  and submits the hash values to VirusTotal (VT) for analysis. No file content is ever sent.
+
+  Any hash values with a VT score greater than zero are bookmarked. Duplicate hash values are ignored and only unique values are submitted to VT.
+
+  This EnScript will work with a public or private VT API key. For public API keys, VT limits the number of
+  queries to four per minute. This EnScript will automatically sleep for one minute once that limit is reached and then continue processing.
+
+  Keep in mind 5,000 unique executables/DLLs can take 24 hours to process using a public VT API key (four per minute).
+
+License:
+
+  Copyright (c) 2017 Lance Mueller
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy
+  of this software and associated documentation files (the "Software"), to deal
+  in the Software without restriction, including without limitation the rights
+  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+  copies of the Software, and to permit persons to whom the Software is
+  furnished to do so, subject to the following conditions:
+
+  The above copyright notice and this permission notice shall be included in all
+  copies or substantial portions of the Software.
+
+  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+  SOFTWARE.
+
+*/
+
+class InputDialogClass: DialogClass {
+
+  PathEditClass OpenFile, Exe;
+  StringEditClass TextAreaEdit;
+  InputDialogClass(DialogClass parent, String &apikey):
+    DialogClass(parent, "Check executable files to VirusTotal"),
+    TextAreaEdit(this, "VirusTotal API Key (public or private):", SAME, NEXT, 300, 8, 0, apikey, 72, REQUIRED)
+  {
+  }
+
+}
+
+class MainClass {
+  NameValueClass list;
+  String address;
+  uint   port, options;
+  String relativeUrl, api;
+  BookmarkClass folder;
+  MainClass ():
+  list(),
+  address = "www.virustotal.com",
+  port    = SocketClass::HTTPSPORT,
+  options =  WebClientClass::SSL | WebClientClass::VALIDATESERVERCERT;
+  relativeUrl = "/vtapi/v2/file/report"
+
+  {
+  }
+
+  void Main(CaseClass c) {
+
+    SystemClass::ClearConsole(1);
+    InputDialogClass diag(null, api);
+    StoreUpdate(0, api);
+    if (diag.Execute() == SystemClass::OK) {
+      StoreUpdate(StorageClass::WRITE, api);
+      DateClass start.Now();
+      Console.WriteLine("Starting: " + start.GetString());
+      folder =  new BookmarkClass(c.BookmarkRoot(), "VirusTotal Results", NodeClass::FOLDER);
+
+      WebClientClass client();
+      WebServiceClass::RequestClass request();
+      request.Command = WebServiceClass::RequestClass::GET;
+
+      ProcessHashValues(c);
+      Calculate(client, request, c);
+
+      DateClass end.Now();
+      Console.WriteLine("Finishing: " + end.GetString());
+      uint mins = (end.GetUnix() - start.GetUnix()) / 60;
+      Console.WriteLine("Total Mins: " + mins);
+    }
+
+  }
+
+  void Bookmark(CaseClass &c, String &desc, String path){
+    ItemIteratorClass iter (c, ItemIteratorClass::NORECURSE, ItemIteratorClass::ALL, NOPROXY);
+    EntryClass root = iter.GetNextEntry();
+    uint len = c.Name().GetLength();
+    path = path.SubString(len+1, -1);
+    len = path.Find("\\");
+    path = path.SubString(len+1, -1);
+    EntryClass entry = root.Find(path);
+    if (entry){
+      BookmarkItemClass bic(folder, entry.Name(), 0);
+      bic.CopyItemData(entry);
+      bic.SetComment(desc);
+    }
+    else {
+      Console.WriteLine("Could not find " + path);
+    }
+  }
+
+  void ProcessHashValues(CaseClass &c){
+    ItemIteratorClass iter (c, ItemIteratorClass::NORECURSE, ItemIteratorClass::ALL);
+    while (EntryClass entry = iter.GetNextEntry()) {
+      String fileType = entry.Signature();
+      if (fileType.Contains("executable") || fileType.Contains("Dynamic Link Library")){
+        if (entry.HashValue()) {
+          NameValueClass n = list.Find(entry.HashValue());
+          if (!n) {
+            NameValueClass key(list, entry.HashValue());
+            key.SetValue(entry.TruePath());
+          }
+          else {
+            Console.WriteLine("Duplicate hash value ignored for file: " + entry.TruePath());
+          }
+        }
+      }
+    }
+  }
+
+  void Calculate(WebClientClass &client, WebServiceClass::RequestClass &request, CaseClass &c){
+
+    uint total = list.Count();
+    Console.WriteLine("Sending: " + total + " to VirusTotal");
+    uint counter;
+    String md5;
+
+    forall (NameValueClass l in list){
+      md5 = l.Name();
+      if (md5 != ""){
+        do {
+          int reply = RequestVT(md5, client, request, c);
+        } while (reply == 204);
+      }
+    }
+  }
+
+  int RequestVT(String &md5, WebClientClass &client, WebServiceClass::RequestClass &request, CaseClass &c){
+    NameVariantClass root();
+    WebServiceClass::ReplyClass   reply();
+    if (client.Open(address, port, options)) {
+
+      request.URL     = relativeUrl + "?apikey=" + api + "&resource=" + md5;
+      if (!client.Command(request, reply)){
+        Console.WriteLine("Command could not be sent to the server: " + reply.Code);
+      }
+      else if (reply.Code == 200){
+        if (reply.File && reply.File.IsOpen()) {
+          String line;
+          reply.File.SetCodePage(CodePageClass::ANSI);
+          while (reply.File.More()) {
+            if(root.ReadJSON(reply.File)){
+              forall(NameVariantClass l in root){
+                if (l.Name() == "response_code")
+                  if (l.Value){
+                    NameVariantClass p = l.Parent().Find("positives");
+                    if ( uint::Convert(p.Value, int::DECIMAL) > 0){
+                      NameVariantClass h = l.Parent().Find("resource");
+                      NameVariantClass scans = l.Parent().Find("scans");
+                      String malwarenames;
+                      forall (NameVariantClass s in scans){
+                        if (s.Name() == "result"){
+                          if (s.Value) {
+                            malwarenames+= s.Parent().Name() + "_" + s.Value + "|";
+                          }
+                        }
+                      }
+                      malwarenames.Trim("|", TRIMEND);
+                      NameValueClass val = list.Find(h.Value);
+                      String desc = p.Value + " - " + malwarenames;
+                      Bookmark (c, desc, val.Value());
+                      Console.WriteLine(p.Value  + "\t" + malwarenames + "\t" + val.Value());
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        else if (reply.Code == 204) {
+          SystemClass::Sleep(60000);
+        }
+        else {
+          Console.WriteLine("Could not complete request. Result Code: " + reply.Code);
+        }
+    }
+    return reply.Code;
+  }
+
+  void StoreUpdate(uint props, String &apikey){
+    StorageClass storage("Check files to VT", props);
+    storage.Value("api", apikey);
+  }
+}
