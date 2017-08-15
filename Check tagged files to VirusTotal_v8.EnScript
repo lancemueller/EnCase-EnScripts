@@ -41,8 +41,6 @@ License:
 */
 
 class InputDialogClass: DialogClass {
-
-  PathEditClass OpenFile, Exe;
   StringEditClass TextAreaEdit;
   InputDialogClass(DialogClass parent, String &apikey):
     DialogClass(parent, "Check tagged files to VirusTotal"),
