@@ -9,7 +9,9 @@ Author:
 
 Usage:
 
-  This EnScript will generate a hash value for all tagged files and send the hash value to Virustotal for scoring. No file content is ever sent.
+  This EnScript will generate hash values for all tagged files and send the hash value to VirusTotal for scoring. 
+  
+  No file content is ever sent.
 
   Any files with a VT score greater than zero are bookmarked.
 
