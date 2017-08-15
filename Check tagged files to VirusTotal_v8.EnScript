@@ -172,8 +172,8 @@ class MainClass {
                     }
                   }
                   else {
-        				    Console.WriteLine("Hash: " + md5 + ", Score: VT - Unknown Hash value");
-        				  }
+                    Console.WriteLine("Hash: " + md5 + ", Score: VT - Unknown Hash value");
+                  }
                 }
               }
             }
